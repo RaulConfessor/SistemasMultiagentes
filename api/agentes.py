@@ -1,15 +1,25 @@
 from langchain_community.llms import Ollama
+from langchain_openai import ChatOpenAI
 from google_calendar import buscar_eventos, criar_evento, alterar_evento, buscar_evento_por_titulo, deletar_evento
 from typing import TypedDict
 from langgraph.graph import StateGraph, END
 from fastapi import FastAPI
 from pydantic import BaseModel
 from datetime import datetime,timedelta,timezone
+from dotenv import load_dotenv
 import json
+import os
 
+load_dotenv()
 
-#LLM local
-llm = Ollama(model='llama3')
+#LLM 
+llm = ChatOpenAI(
+    base_url="https://openrouter.ai/api/v1",
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    model="google/gemini-3.1-flash-lite-preview",
+    max_tokens=1000
+    
+) 
 
 #Estrutura os da memoria utilizaada no fluxo
 class Memoria(TypedDict):
@@ -44,7 +54,7 @@ def extrair_datas(mensagem: str) -> dict:
         - Se não mencionar período, inicio = agora, fim = daqui 7 dias (padrão)
         
         Mensagem: {mensagem}
-    """).strip()
+    """).content.strip()
     try:
         limpo = resultado.replace('```json', '').replace('```', '').strip()
         return json.loads(limpo)
@@ -53,7 +63,7 @@ def extrair_datas(mensagem: str) -> dict:
         return {
                 'data_inicio': agora_dt.isoformat(),
                 'data_fim': (agora_dt + timedelta(days=7)).isoformat()
-            }
+            }  
 
 def extrair_intencao(mensagem: str) -> dict:
     """
@@ -93,7 +103,7 @@ def extrair_intencao(mensagem: str) -> dict:
     - "o que tenho essa semana" → consultar, datas da semana
 
     Mensagem: {mensagem}
-    """).strip()
+    """).content.strip()
 
     try:
         limpo = resultado.replace('```json', '').replace('```', '').strip()
@@ -114,6 +124,10 @@ def agente_agenda(memoria):
                 data_inicio=intencao.get('data_inicio'),
                 data_fim=intencao.get('data_fim')
             )
+            return {
+                'resposta': f'Sua agenda:\n\n{resultado_bruto}',
+                'agente_usado': 'agenda'
+            }
 
         elif acao == 'criar':
             if not intencao.get('titulo') or not intencao.get('data_inicio'):
@@ -154,7 +168,7 @@ def agente_agenda(memoria):
         Resultado: {resultado_bruto}
         Responda em 1-2 frases curtas e diretas confirmando o que foi feito.
         Sem introduções, sem entusiasmo exagerado, sem repetir o ID do evento.
-        """)
+        """).content.strip()
 
         return {'resposta': resposta, 'agente_usado': 'agenda'}
 
@@ -174,7 +188,7 @@ def agente_pesquisa(memoria):
         {contexto}
         
         Pesquise e explique sobre: {pergunta}
-        ''')
+        ''').content.strip()
         return {'resposta': resultado}
     except Exception as e:
         return {'resposta': f'Erro ao processar pesquisa: {str(e)}'}
@@ -192,7 +206,7 @@ def agente_conversa(memoria):
         {contexto}
         
         Responda naturalmente: {pergunta}
-        ''')
+        ''').content.strip()
         return {'resposta': resultado}
     except Exception as e:
         return {'resposta': f'Erro ao processar conversa: {str(e)}'}
@@ -210,7 +224,7 @@ def supervisor(memoria):
     Responda APENAS com a palavra da categoria, sem explicação.
     
     Mensagem: {texto}
-    """).strip().lower()
+    """).content.strip().lower()
     
     if classificacao not in ['agenda', 'pesquisa', 'conversa']:
         return 'conversa' 

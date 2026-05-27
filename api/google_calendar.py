@@ -1,32 +1,38 @@
 from datetime import datetime,timedelta,timezone
 from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
 from googleapiclient.discovery import build
-
-
+import pickle
+import base64
+import os
 
 
 #Permissoes Google
-#SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 #Login
-flow = InstalledAppFlow.from_client_secrets_file(
-    'credenciais.json',
-    SCOPES
-)
+def autenticar():
+    token = os.getenv('GOOGLE_TOKEN_B64')
 
-creds = flow.run_local_server(port=0)
+    if token:
+        creds = pickle.loads(base64.b64decode(token))
+    elif os.path.exists('token.pickle'):
+        with open('token.pickle', 'rb') as f:
+            creds = pickle.load(f)
+    else:
+        raise Exception('Credenciais não encontradas. Rode gerar_token.py primeiro.')
 
-#Conexao
-service = build('calendar', 'v3', credentials=creds)
+    if creds.expired and creds.refresh_token:
+        creds.refresh(Request())
 
+    return build('calendar', 'v3', credentials=creds)
 
+service = autenticar()
 
 
 def buscar_eventos(data_inicio=None, data_fim=None):
-    agora = datetime.now(timezone(timedelta(hours=-3))).isoformat()
-    
-    # Se não passar datas, pega agora
+    agora = datetime.now(timezone.utc)
+
     if not data_inicio:
         data_inicio = agora.isoformat()
     if not data_fim:
@@ -40,21 +46,26 @@ def buscar_eventos(data_inicio=None, data_fim=None):
         singleEvents=True,
         orderBy='startTime'
     ).execute()
- 
+
     itens = eventos.get('items', [])
- 
+
     if not itens:
-        return 'Você não possui eventos hoje.'
- 
-    resposta = 'Seus próximos eventos:\n\n'
- 
-    #Pega o titulo e o inicio e os formata
+        return 'Você não possui eventos nesse período.'
+
+    resposta = ''
     for evento in itens:
         titulo = evento['summary']
-        inicio = evento['start'].get('dateTime', evento['start'].get('date'))
-        resposta += f'- {titulo} | {inicio}\n'
+        inicio_raw = evento['start'].get('dateTime', evento['start'].get('date'))
 
- 
+        # Formata para mostrar só HH:MM
+        try:
+            dt = datetime.fromisoformat(inicio_raw)
+            hora = dt.strftime('%H:%M')
+        except Exception:
+            hora = inicio_raw  # fallback se vier só data sem hora
+
+        resposta += f'- {titulo} | {hora}\n'
+
     return resposta
 
 def criar_evento(titulo: str, data_inicio: str, data_fim: str, descricao = ''):

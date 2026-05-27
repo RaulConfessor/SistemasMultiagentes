@@ -16,3 +16,8 @@ bot/node_modules/
 
 # VSCode
 .vscode/
+
+.env
+
+token.pickle
+__pycache__/
