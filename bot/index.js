@@ -46,7 +46,7 @@ client.on('message_create', async message => { //Agir quando a msg for criada
 
 
         const resposta = await axios.post( //Envia para a api rodando localmente
-            'http://127.0.0.1:8000/chat', 
+            'https://sistemasmultiagentes.onrender.com/chat', 
             {
                 texto: message.body 
             }
